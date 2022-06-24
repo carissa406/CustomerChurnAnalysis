@@ -1,0 +1,172 @@
+### Predicting Customer Churn using Logistic Regression and Decision Trees
+
+# Data Exploration
+```{r}
+churn = read.csv("Churn_Modelling.csv", stringsAsFactors = TRUE)
+str(churn)
+```
+Removing unnecessary variables from the database such as rownumber, customerid, and surname.
+```{r}
+churn = subset(churn, select = -c(RowNumber, CustomerId, Surname))
+```
+
+Finding which variables are associated with exited (our target variable), and removing those that are not. Using Mosiac plot and chi squared test.
+```{r}
+library(gmodels)
+```
+```{r}
+geot = table(churn$Exited, churn$Geography)
+gent = table(churn$Exited, churn$Gender)
+hcct = table(churn$Exited, churn$HasCrCard)
+iamt = table(churn$Exited, churn$IsActiveMember)
+
+mosaicplot(geot, shade=TRUE)
+mosaicplot(gent, shade=TRUE)
+mosaicplot(hcct, shade = TRUE)
+mosaicplot(iamt, shade = TRUE)
+
+chisq.test(geot)
+chisq.test(gent)
+chisq.test(hcct)
+chisq.test(iamt)
+```
+We used the chisquare test and mosaic plot to compare exited with the other categorical variables: hascrcard, isactivemember, geography, and gender. From these the only variable that had a high p-value was hascrcard, we can also see that the mosaic plot it returned is completely whtie, therefore we can accurately say that having a credit card is not associated with whether the customer leaves the bank or not. We will remove this variable in the next step.
+
+```{r}
+boxplot(churn$CreditScore~churn$Exited)
+boxplot(churn$Age~churn$Exited)
+boxplot(churn$Tenure~churn$Exited)
+boxplot(churn$Balance~churn$Exited)
+boxplot(churn$NumOfProducts~churn$Exited)
+boxplot(churn$EstimatedSalary~churn$Exited)
+```
+To compare exited with the various numeric variables in our data, we will use boxplots and t.tests. From the above boxplots, There is not a very noticeable difference between the means of exited vs creditscore, tenure, and estimated salary. 
+
+```{r}
+t.test(churn$CreditScore~churn$Exited,alternative="two.sided")
+t.test(churn$Age~churn$Exited,alternative="two.sided")
+t.test(churn$Tenure~churn$Exited,alternative="two.sided")
+t.test(churn$Balance~churn$Exited,alternative="two.sided")
+t.test(churn$NumOfProducts~churn$Exited,alternative="two.sided")
+t.test(churn$IsActiveMember~churn$Exited,alternative="two.sided")
+t.test(churn$EstimatedSalary~churn$Exited,alternative="two.sided")
+```
+From these t-tests we can see that Credit score, age, balance, num of products, and active member are all related to exited. Tenure and estimated salary have higher p-values than our alpha 0.05, therefore, they are not related and we will remove them in the next step.
+
+```{r}
+#remove hascreditcard, tenure and estimated salary
+churn = subset(churn, select = -c(Tenure, EstimatedSalary, HasCrCard))
+```
+
+```{r}
+#3. setseed and split data into train and test 80 train 20 test
+set.seed(123)
+
+#training
+train_sample = sample(10000, 8000)
+churn_train = churn[train_sample, ]
+churn_test = churn[-train_sample, ]
+```
+
+```{r}
+#Train a logistic regression model on the train data using the glm package and use it to 
+#predict “Exited” for the test data.
+
+logistic_model = glm(Exited~CreditScore+Geography+Gender+Age+Balance+NumOfProducts+IsActiveMember, data=churn_train,family="binomial")
+summary(logistic_model)
+```
+```{r}
+pred=predict(logistic_model, churn_test, type='response')
+head(pred)
+pred.label=factor(ifelse(pred>.5,"Exit", "Stay"))
+length(pred.label)
+```
+```{r}
+#Get the cross table between the predicted labels and true labels in the test data and compute total_error, false positive rate, and false negative rate.
+actual.label=factor(ifelse(churn_test$Exited==1, "Exit", "Stay"))
+t=table(pred.label,actual.label)
+t
+```
+
+```{r}
+error=(t[1,2]+t[2,1])/sum(t)
+error
+```
+* total_error = 0.192
+* false positive rate = .44
+* false negative rate = .17
+
+
+```{r}
+#Downsampling to see if there are any changes to our error rate.
+table(churn$Exited)
+```
+```{r}
+#divide training data into two sets of people who did and didnt exit
+exited = churn_train$Exited==1
+didntexit = churn_train[!exited, ]
+didexit = churn_train[exited, ]
+```
+
+```{r}
+#sample non exiting so that you have same number of exiting and non exiting
+library(dplyr)
+s.didntexit = sample_n(didntexit, 1634)
+```
+
+```{r}
+#combine exiting and nonexiting into one dataframe
+churn_train_new = rbind(s.didntexit, didexit)
+```
+
+```{r}
+#retrain the model and get errors, which model does better
+logistic_model2 = glm(Exited~CreditScore+Geography+Gender+Age+Balance+NumOfProducts+IsActiveMember, data=churn_train_new,family="binomial")
+#summary(logistic_model2)
+pred=predict(logistic_model2, churn_test, type='response')
+#head(pred)
+pred.label=factor(ifelse(pred>.5,"Exit", "Stay"))
+actual.label=factor(ifelse(churn_test$Exited==1, "Exit", "Stay"))
+t=table(pred.label,actual.label)
+t
+error=(t[1,2]+t[2,1])/sum(t)
+error
+```
+* total error: .2955
+* false positives: 0.62
+* false negatives: 0.11
+
+The total error for this model is .2955, The false positive rate is .62, and the false negative rate is .11. In this case, we want to reduce the amount of false negatives meaning that we incorrectly predict that the customer will stay with the bank. The second model is better for this because the false negative rate is lower. However, the total error of this model is greater than the previous.
+
+```{r}
+#Use a C5.0 decision tree model to predict “Exited”.
+library(C50)
+churn_train$Exited = factor(churn_train$Exited)
+churn_c50 = C5.0(churn_train[-8], churn_train$Exited, trials=30)
+churn_c50
+
+```
+```{r}
+library(gmodels)
+churn_c50_pred = predict(churn_c50, churn_test)
+CrossTable(churn_test$Exited, churn_c50_pred)
+```
+* total error: .131
+* false positives: 0.04
+* false negatives: 0.49
+
+```{r}
+#run the decision tree on downsampled data
+churn_train_new$Exited = factor(churn_train_new$Exited)
+churn_c50_2 = C5.0(churn_train_new[-8], churn_train_new$Exited, trials=30)
+churn_c50_2
+```
+```{r}
+churn_c50_pred_2 = predict(churn_c50_2, churn_test)
+CrossTable(churn_test$Exited, churn_c50_pred_2)
+```
+* total error: .214
+* false positives: 0.20
+* false negatives: 0.25
+
+From the c5.0 models the downsampled model is better because the false negative rate is lower than the non-downsampled model even though the total error rate is higher. Comparing the downsampled logistic regression model to the downsampled tree model, The logistic regression model wins because the false negative rate is lower. However, it does have a higher total error than any of the models. This is because a bank would rather be wrong about someone exiting the bank than be wrong about someone staying at the bank. The latter has bigger consequences and profit loss. 
