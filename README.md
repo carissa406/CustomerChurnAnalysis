@@ -32,16 +32,42 @@ expected frequency if data were
 random
 Variables that were not related to our target variable were removed. 
 
-
 ![Mosaic Plots](https://github.com/carissa406/CustomerChurnAnalysis/blob/main/mosaicplots.png)
-
-Pearson's Chi-squared test with Yates' continuity correction
-data:  hcct
-X-squared = 0.47134, df = 1, p-value = 0.4924
 
 The results show that the only variable not related to Exited was HasCrCard because it's p-value was higher than our alpha = 0.05. We can also see that the mosiac plot for hcct(HasCrCard) is also completely white indicating that there is no relationship between Exited and HasCrCard. HasCrCard variable was then removed.
 
 For comparing the numeric variables with Exited, boxplots and t-tests were used. 
 
+![Box Plots](https://github.com/carissa406/CustomerChurnAnalysis/blob/main/Boxplots.png)
+
+From the t-tests we found that CreditScore, Age, Balance, NumOfProducts, and ActiveMember are all related to Exited. Tenure and EstimatedSalary had higher p-values than our alpha 0.05, therefore, they are not related and we will remove them in the next step.
+
+# Data Analysis and Experimental Results
+
+The data was first trained using logistic regression in the "glm" package in R. We split the data into 80% training and 20% test data. 
+Here are the results of the inital model:
+The following is a cross table of the model's results.
+          actual.label
+pred.label Exit Stay
+      Exit   87   68
+      Stay  316 1529
+      
+* total_error = 0.192
+* false positive rate = .44
+* false negative rate = .17
+
+Then, we downsampled the data using the "dplyr" package "sample_n" function. I retrained the model with the new downsampled data to get the following results: 
+          actual.label
+pred.label Exit Stay
+      Exit  270  469
+      Stay  133 1128
+      
+* total error: .2955
+* false positives: 0.62
+* false negatives: 0.11
+
+In this case, we want to reduce the amount of false negatives meaning that we incorrectly predict that the customer will stay with the bank since that will have the greater impact on the company. The second model is better for this because the false negative rate is lower. However, the total error of this model is greater than the previous.
+
+Second, we will use a c5.0 decision tree model to predict Exited to see if it produces a better or worse result that the logistic regression model.
 
 
